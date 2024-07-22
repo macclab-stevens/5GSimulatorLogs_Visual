@@ -7,6 +7,8 @@ import scipy.io
 import pandas as pd
 import numpy as np
 
+symbolsPerSlot = 14
+
 def readFile(fileName):
     print("readFile()")
     mat = scipy.io.loadmat(fileName)
@@ -50,15 +52,41 @@ def readFile(fileName):
 
     return df
 
-def mergeRBG(df):
-    print('mergeRBG()')
-    allos = pd.DataFrame()
-    return allos
+def mergeRBG(df,frameIdx,slotIdx):
+    print('mergeRBG(df,{},{})'.format(frameIdx,slotIdx))
+    a = df[(df['Frame']==frameIdx) & (df['Slot']==slotIdx)]
+    if a.empty: return a
+    slot = pd.DataFrame(0,index=np.arange(symbolsPerSlot), columns=np.arange(len(a.iloc[1]['RBG'])))
+    slot.insert(0,"Frame",frameIdx)
+    slot.insert(1,"Slot",slotIdx)
+    for n in range(1,df['RNTI'].max()+1):
+        r = a[a['RNTI']==n]
+        for i in range(len(r.index)):
+            rbg = r.iloc[i]['RBG']
+            # print(rbg)
+            for rb in range(len(rbg)):
+                if rbg[rb]==1:
+                    for x in range(r.iloc[i]['Num Sym']):
+                        slot.loc[r.iloc[i]['Start Sym']+x,rb] = r.iloc[i]['RNTI']
+
+    return slot
+
+def mergeAll(df):
+    merged = []
+    for i in range(0,df['Frame'].max()):
+        x = 1 if i==0 else 0
+        for j in range(x,10):
+            data = mergeRBG(df,i,j)
+            if not data.empty:
+                merged.append(mergeRBG(df,i,j))
+    df = pd.concat(merged,ignore_index=True)
+    print(df)
+    return df
 
 def main():
-    print("Main()")
+    print("main()")
     df = readFile('simulationLogs.mat')
-    mergeRBG(df)
+    mergeAll(df)
 
 if __name__ == "__main__":
     """ This is executed when run from the command line """
