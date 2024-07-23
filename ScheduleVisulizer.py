@@ -6,6 +6,9 @@ __license__ = "MIT"
 import scipy.io
 import pandas as pd
 import numpy as np
+import matplotlib
+import matplotlib.pyplot as plt 
+import matplotlib.patches as patches
 
 symbolsPerSlot = 14
 
@@ -83,11 +86,36 @@ def mergeAll(df):
     print(df)
     return df
 
+def plotRBGrid(ax,df):
+    print("plotRBGrid()")
+    xIndex = 0
+    yIndex = 0
+    boxWidth = 1
+    boxHeight = 1
+    RBGRange = len(df.iloc[0])-2
+    print("Range:{}".format(RBGRange))
+    print(df)
+    row = df.iloc[0]
+    print(row)
+    for i in range(RBGRange):
+        Pulse = plt.Rectangle((xIndex, yIndex), boxWidth, boxHeight, fill=True,edgecolor='b',facecolor='r') 
+        ax.add_patch(Pulse)
+        # Index += RadarPW + RadarPRI_s
+        xIndex += boxWidth
+    return
+
 def main():
     print("main()")
-    df = readFile('simulationLogs.mat')
-    mergeAll(df)
-
+    # df = readFile('simulationLogs.mat')
+    # df = mergeAll(df)
+    # df.to_pickle('tmp.pkl')
+    df = pd.read_pickle('tmp.pkl')
+    fig = plt.figure(figsize=(25,5)) 
+    ax = fig.add_subplot(1, 1, 1)
+    ax.set_xlim(0,10)
+    ax.set_ylim(-10,10) 
+    plotRBGrid(ax,df)
+    plt.savefig('plt.jpeg')
 if __name__ == "__main__":
     """ This is executed when run from the command line """
     main()
