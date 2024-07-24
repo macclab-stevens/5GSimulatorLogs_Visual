@@ -12,8 +12,26 @@ import matplotlib.patches as patches
 
 symbolsPerSlot = 14
 
-def readFile(fileName):
-    print("readFile()")
+#Colors
+cDeflt = 'w'
+c1 = 'r'
+c2 = 'b'
+c3 = 'g'
+c4 = 'y'
+
+def readSimParamFile(fileName):
+    print('readSimParamFile()')
+    mat = scipy.io.loadmat(fileName)
+    NumFramesSim = mat['simParameters']['NumFramesSim'][0][0][0][0]
+    SchedulingType = mat['simParameters']['SchedulingType'][0][0][0][0]
+    NumUEs = mat['simParameters']['NumUEs'][0][0][0][0]
+
+    print(NumFramesSim,SchedulingType,NumUEs)
+    df = pd.DataFrame()
+    return df
+
+def readSimLogFile(fileName):
+    print("readSimLogFile()")
     mat = scipy.io.loadmat(fileName)
     
     #pull the relevant arrary from
@@ -62,6 +80,7 @@ def mergeRBG(df,frameIdx,slotIdx):
     slot = pd.DataFrame(0,index=np.arange(symbolsPerSlot), columns=np.arange(len(a.iloc[1]['RBG'])))
     slot.insert(0,"Frame",frameIdx)
     slot.insert(1,"Slot",slotIdx)
+    slot.insert(2,'Type',0)
     for n in range(1,df['RNTI'].max()+1):
         r = a[a['RNTI']==n]
         for i in range(len(r.index)):
@@ -71,7 +90,7 @@ def mergeRBG(df,frameIdx,slotIdx):
                 if rbg[rb]==1:
                     for x in range(r.iloc[i]['Num Sym']):
                         slot.loc[r.iloc[i]['Start Sym']+x,rb] = r.iloc[i]['RNTI']
-
+                        # slot.loc[r.iloc[i]['Start Sym']
     return slot
 
 def mergeAll(df):
@@ -92,29 +111,47 @@ def plotRBGrid(ax,df):
     yIndex = 0
     boxWidth = 1
     boxHeight = 1
-    RBGRange = len(df.iloc[0])-2
+    RBGRange = len(df.iloc[0])-3
     print("Range:{}".format(RBGRange))
     print(df)
-    row = df.iloc[0]
-    print(row)
-    for i in range(RBGRange):
-        Pulse = plt.Rectangle((xIndex, yIndex), boxWidth, boxHeight, fill=True,edgecolor='b',facecolor='r') 
-        ax.add_patch(Pulse)
-        # Index += RadarPW + RadarPRI_s
-        xIndex += boxWidth
+    for rowIdx in range(len(df.index)):
+        row = df.iloc[rowIdx]
+        for i in range(0,RBGRange):
+            match row[i]:
+                case 1:
+                    idxColor = c1
+                case 2: 
+                    idxColor = c2
+                case 3:
+                    idxColor = c3
+                case 4:
+                    idxColor = c4
+                case _:
+                    idxColor = cDeflt
+            Pulse = plt.Rectangle((xIndex, yIndex), boxWidth, boxHeight, fill=True,edgecolor='black',facecolor=idxColor) 
+            ax.add_patch(Pulse)
+            # Index += RadarPW + RadarPRI_s
+            xIndex += boxWidth
+        yIndex -= boxHeight
+        xIndex = 0
     return
 
 def main():
     print("main()")
-    # df = readFile('simulationLogs.mat')
-    # df = mergeAll(df)
-    # df.to_pickle('tmp.pkl')
+    simParams = readSimParamFile('simParameters.mat')
+    return
+    df = readSimLogFile('simulationLogs.mat')
+    print(df)
+    df = mergeAll(df)
+    df.to_pickle('tmp.pkl')
     df = pd.read_pickle('tmp.pkl')
-    fig = plt.figure(figsize=(25,5)) 
+    # df.to_csv('tmp.csv')
+    fig = plt.figure(figsize=(4,100)) 
     ax = fig.add_subplot(1, 1, 1)
-    ax.set_xlim(0,10)
-    ax.set_ylim(-10,10) 
+    ax.set_xlim(0,9)
+    ax.set_ylim(-1000,0) 
     plotRBGrid(ax,df)
+    plt.subplots_adjust(left=0.1, right=.97, top=0.99, bottom=0.01)
     plt.savefig('plt.jpeg')
 if __name__ == "__main__":
     """ This is executed when run from the command line """
