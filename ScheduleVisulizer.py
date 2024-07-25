@@ -19,16 +19,29 @@ c2 = 'b'
 c3 = 'g'
 c4 = 'y'
 
-def readSimParamFile(fileName):
-    print('readSimParamFile()')
-    mat = scipy.io.loadmat(fileName)
-    NumFramesSim = mat['simParameters']['NumFramesSim'][0][0][0][0]
-    SchedulingType = mat['simParameters']['SchedulingType'][0][0][0][0]
-    NumUEs = mat['simParameters']['NumUEs'][0][0][0][0]
+class simParameters:
+    def __init__(self,fileName) -> None:
+        print('class simParameters __init__')
+        mat = scipy.io.loadmat(fileName)
+        self.NumFramesSim = mat['simParameters']['NumFramesSim'][0][0][0][0]
+        self.SchedulingType = mat['simParameters']['SchedulingType'][0][0][0][0]
+        self.NumUEs = mat['simParameters']['NumUEs'][0][0][0][0]
+        self.NumRBs = mat['simParameters']['NumRBs'][0][0][0][0]
+        self.SCS = mat['simParameters']['SCS'][0][0][0][0]
+        self.DLBandwidth = mat['simParameters']['DLBandwidth'][0][0][0][0]
+        self.ULBandwidth = mat['simParameters']['ULBandwidth'][0][0][0][0]
+        self.DLCarrierFreq = mat['simParameters']['DLCarrierFreq'][0][0][0][0]
+        self.ULCarrierFreq = mat['simParameters']['ULCarrierFreq'][0][0][0][0]
+        self.NumDLSlots = mat['simParameters']['NumDLSlots'][0][0][0][0]
+        self.NumDLSyms = mat['simParameters']['NumDLSyms'][0][0][0][0]
+        self.NumULSyms = mat['simParameters']['NumULSyms'][0][0][0][0]
+        self.NumULSlots = mat['simParameters']['NumULSlots'][0][0][0][0]
+        self.SchedulerStrategy = mat['simParameters']['SchedulerStrategy'][0][0][0][0]
+        self.TTIGranularity = mat['simParameters']['TTIGranularity'][0][0][0][0]
+        self.RBAllocationLimitUL = mat['simParameters']['RBAllocationLimitUL'][0][0][0][0]
+        self.RBAllocationLimitDL = mat['simParameters']['RBAllocationLimitDL'][0][0][0][0]
+        
 
-    print(NumFramesSim,SchedulingType,NumUEs)
-    df = pd.DataFrame()
-    return df
 
 def readSimLogFile(fileName):
     print("readSimLogFile()")
@@ -73,14 +86,35 @@ def readSimLogFile(fileName):
 
     return df
 
-def mergeRBG(df,frameIdx,slotIdx):
+def slotType(slot,slotIdx,params):
+    if slotIdx < params.NumDLSlots: #DL SLOTS
+        print("Slot:{}, Type:{}".format(slotIdx,"DL"))
+        slot['Type'] = "DL"
+    elif slotIdx == params.NumDLSlots: #SpecialSlot
+        for sym in range(symbolsPerSlot):
+            print(sym)
+            numGuard = params.NumDLSyms - params.NumULSyms
+            if sym < params.NumDLSyms:
+                slot.loc[sym,'Type'] = 'DL'
+            elif sym >= params.NumDLSyms and sym < params.NumDLSyms+numGuard:
+                slot.loc[sym,'Type'] = 'G'
+            elif sym >= params.NumDLSyms + numGuard:
+                slot.loc[sym,'Type'] = 'UL'
+            else:
+                slot.loc[sym,'Type'] = 'Er'
+    
+    return slot
+
+def mergeRBG(df,params,frameIdx,slotIdx):
     print('mergeRBG(df,{},{})'.format(frameIdx,slotIdx))
     a = df[(df['Frame']==frameIdx) & (df['Slot']==slotIdx)]
-    if a.empty: return a
-    slot = pd.DataFrame(0,index=np.arange(symbolsPerSlot), columns=np.arange(len(a.iloc[1]['RBG'])))
+    # if a.empty: return a
+    slot = pd.DataFrame(0,index=np.arange(symbolsPerSlot), columns=np.arange(int(params.NumRBs/2)))
     slot.insert(0,"Frame",frameIdx)
     slot.insert(1,"Slot",slotIdx)
     slot.insert(2,'Type',0)
+    slot = slotType(slot,slotIdx,params)
+    if a.empty: return slot
     for n in range(1,df['RNTI'].max()+1):
         r = a[a['RNTI']==n]
         for i in range(len(r.index)):
@@ -138,13 +172,16 @@ def plotRBGrid(ax,df):
 
 def main():
     print("main()")
-    simParams = readSimParamFile('simParameters.mat')
-    return
+    simParams = simParameters('simParameters.mat')
     df = readSimLogFile('simulationLogs.mat')
     print(df)
+    df = mergeRBG(df,simParams,2,2)
+    print(df)
+    return
     df = mergeAll(df)
-    df.to_pickle('tmp.pkl')
-    df = pd.read_pickle('tmp.pkl')
+    
+    # df.to_pickle('tmp.pkl')
+    # df = pd.read_pickle('tmp.pkl')
     # df.to_csv('tmp.csv')
     fig = plt.figure(figsize=(4,100)) 
     ax = fig.add_subplot(1, 1, 1)
