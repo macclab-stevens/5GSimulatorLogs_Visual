@@ -9,15 +9,20 @@ import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt 
 import matplotlib.patches as patches
+from matplotlib.offsetbox import AnchoredText
+from datetime import datetime
 
 symbolsPerSlot = 14
 
 #Colors
 cDeflt = 'w'
-c1 = 'r'
-c2 = 'b'
-c3 = 'g'
-c4 = 'y'
+rntiColors = [
+'w',
+'r',
+'b',
+'g',
+'y']
+
 
 class simParameters:
     def __init__(self,fileName) -> None:
@@ -36,7 +41,7 @@ class simParameters:
         self.NumDLSyms = mat['simParameters']['NumDLSyms'][0][0][0][0]
         self.NumULSyms = mat['simParameters']['NumULSyms'][0][0][0][0]
         self.NumULSlots = mat['simParameters']['NumULSlots'][0][0][0][0]
-        self.SchedulerStrategy = mat['simParameters']['SchedulerStrategy'][0][0][0][0]
+        self.SchedulerStrategy = mat['simParameters']['SchedulerStrategy'][0][0][0]
         self.TTIGranularity = mat['simParameters']['TTIGranularity'][0][0][0][0]
         self.RBAllocationLimitUL = mat['simParameters']['RBAllocationLimitUL'][0][0][0][0]
         self.RBAllocationLimitDL = mat['simParameters']['RBAllocationLimitDL'][0][0][0][0]
@@ -87,13 +92,14 @@ def readSimLogFile(fileName):
     return df
 
 def slotType(slot,slotIdx,params):
+    if slotIdx >=5: slotIdx -= 5
     if slotIdx < params.NumDLSlots: #DL SLOTS
         print("Slot:{}, Type:{}".format(slotIdx,"DL"))
         slot['Type'] = "DL"
     elif slotIdx == params.NumDLSlots: #SpecialSlot
         for sym in range(symbolsPerSlot):
             print(sym)
-            numGuard = params.NumDLSyms - params.NumULSyms
+            numGuard = symbolsPerSlot - params.NumDLSyms - params.NumULSyms
             if sym < params.NumDLSyms:
                 slot.loc[sym,'Type'] = 'DL'
             elif sym >= params.NumDLSyms and sym < params.NumDLSyms+numGuard:
@@ -102,7 +108,8 @@ def slotType(slot,slotIdx,params):
                 slot.loc[sym,'Type'] = 'UL'
             else:
                 slot.loc[sym,'Type'] = 'Er'
-    
+    else:
+        slot['Type'] = "UL"
     return slot
 
 def mergeRBG(df,params,frameIdx,slotIdx):
@@ -127,41 +134,75 @@ def mergeRBG(df,params,frameIdx,slotIdx):
                         # slot.loc[r.iloc[i]['Start Sym']
     return slot
 
-def mergeAll(df):
+def mergeAll(df,simParams):
     merged = []
     for i in range(0,df['Frame'].max()):
-        x = 1 if i==0 else 0
-        for j in range(x,10):
-            data = mergeRBG(df,i,j)
+        for j in range(10):
+            data = mergeRBG(df,simParams,i,j)
             if not data.empty:
-                merged.append(mergeRBG(df,i,j))
+                merged.append(mergeRBG(df,simParams,i,j))
     df = pd.concat(merged,ignore_index=True)
     print(df)
     return df
 
+def plotSymType(ax,simParams,df):
+    xIndex = simParams.NumRBs/2 +0.5
+    for i in range(0,len(df.index)):
+        ax.annotate(df.loc[i,'Type'][0], (xIndex, (i*-1)-1.05), size=6, ha='right', va='bottom')
+    return
+
+def plotSecAxes(ax,simParams,df):
+
+    # -- slotNames
+    slotNames = ax.secondary_yaxis(location=0)
+    slotLocations = []
+    slotNameLabels = []
+    spacing= ' '
+    for i in range(6,len(df.index),symbolsPerSlot):
+        symName = df.loc[i,'Slot']
+        slotLocations.append(i*-1)
+        slotNameLabels.append('S'+str(symName)+spacing)
+    slotNames.set_yticks(slotLocations,labels = slotNameLabels)
+    slotNames.tick_params('y', length=0)
+
+    # -- slotLines
+    slotLines = ax.secondary_yaxis(location=0)
+    slotLinesIdxs = []
+    for i in range(0,len(df.index),symbolsPerSlot):
+        slotLinesIdxs.append(i*-1)
+    slotLines.set_yticks(slotLinesIdxs,labels=[])
+    slotLines.tick_params('y', length=10,width=1.5)
+
+    # -- frameNames
+    frameNames = ax.secondary_yaxis(location=0)
+    frameIdxs = []
+    frameNameLabels = []
+    frameSpacing = '  '
+    for i in range(0,len(df.index),symbolsPerSlot*10):
+        frameIdxs.append(i*-1)
+        frameNameLabels.append("Frame "+str(df.loc[i,'Frame'])+frameSpacing)
+    print(frameIdxs)
+    print(frameNameLabels)
+    frameNames.set_yticks(frameIdxs,labels=frameNameLabels)
+    # frameNames.tick_params('y', length=10,width=1.5)
+    # -- frameLines
+
+    return
+
+
 def plotRBGrid(ax,df):
     print("plotRBGrid()")
     xIndex = 0
-    yIndex = 0
+    yIndex = -1
     boxWidth = 1
     boxHeight = 1
     RBGRange = len(df.iloc[0])-3
     print("Range:{}".format(RBGRange))
     print(df)
-    for rowIdx in range(len(df.index)):
+    for rowIdx in range(0,len(df.index)):
         row = df.iloc[rowIdx]
         for i in range(0,RBGRange):
-            match row[i]:
-                case 1:
-                    idxColor = c1
-                case 2: 
-                    idxColor = c2
-                case 3:
-                    idxColor = c3
-                case 4:
-                    idxColor = c4
-                case _:
-                    idxColor = cDeflt
+            idxColor = rntiColors[row[i]]
             Pulse = plt.Rectangle((xIndex, yIndex), boxWidth, boxHeight, fill=True,edgecolor='black',facecolor=idxColor) 
             ax.add_patch(Pulse)
             # Index += RadarPW + RadarPRI_s
@@ -170,26 +211,62 @@ def plotRBGrid(ax,df):
         xIndex = 0
     return
 
+def addLegend(ax,simParams,df):
+    textSize = 5
+    #first legend
+    xloc = 0.8
+    yloc = 1.005
+    ues = []
+    for ue in range(1,simParams.NumUEs+1):
+        ues.append(patches.Patch(color=rntiColors[ue], label='RNTI:'+str(ue))    )
+    ax.add_artist(ax.legend(handles=ues,bbox_to_anchor=(xloc, yloc), loc='lower left',fontsize=textSize))
+    
+
+    at2 = AnchoredText("Figure 1(b)",
+                       loc='lower left', prop=dict(size=8), frameon=True,
+                       bbox_to_anchor=(-0.25, 1.0065),
+                       bbox_transform=ax.transAxes
+                       )
+    ax.add_artist(at2)
+    return
+
 def main():
     print("main()")
+    #--Import Files
     simParams = simParameters('simParameters.mat')
     df = readSimLogFile('simulationLogs.mat')
-    print(df)
-    df = mergeRBG(df,simParams,2,2)
-    print(df)
-    return
-    df = mergeAll(df)
-    
+    #--Generate df to plot
+    # df = mergeAll(df,simParams)
+
+    #--save/load for faster coding interations
     # df.to_pickle('tmp.pkl')
-    # df = pd.read_pickle('tmp.pkl')
     # df.to_csv('tmp.csv')
+    df = pd.read_pickle('tmp.pkl')
+
+    #--setup plot
     fig = plt.figure(figsize=(4,100)) 
     ax = fig.add_subplot(1, 1, 1)
-    ax.set_xlim(0,9)
-    ax.set_ylim(-1000,0) 
+    ax.set_xlim(0,11)
+    ax.set_ylim(-1000,0.075) 
+    ax.xaxis.set_label_position('top')
+    ax.xaxis.tick_top()
+    ax.set_yticklabels([])
+    #--plot
     plotRBGrid(ax,df)
-    plt.subplots_adjust(left=0.1, right=.97, top=0.99, bottom=0.01)
+    plotSymType(ax,simParams,df)
+    plotSecAxes(ax,simParams,df)
+    addLegend(ax,simParams,df)
+    #--adjust
+    plt.subplots_adjust(left=0.2, right=.998, top=0.99, bottom=0.001)
+
+    #--save or show
+    pltName = simParams.SchedulerStrategy+"_"
+    pltName += str(simParams.NumUEs)+"ue_"
+    pltName += "TTI"+str(simParams.TTIGranularity)+'_'
+    pltName += datetime.now().strftime("%Y%m%d_%H%M%S")
+    print(pltName)
     plt.savefig('plt.jpeg')
+    # plt.show()
 if __name__ == "__main__":
     """ This is executed when run from the command line """
     main()
