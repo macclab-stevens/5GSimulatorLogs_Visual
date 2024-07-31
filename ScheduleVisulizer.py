@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/opt/homebrew/bin/python3
 #Script Used to graph 5G TDD slot patterns, and calculate symbol interfeerence based on radar charcterisitics. 
 __author__ = "Eric Forbes"
 __version__ = "0.1.0"
@@ -11,22 +11,19 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from matplotlib.offsetbox import AnchoredText
 from datetime import datetime
-
+import sys
 symbolsPerSlot = 14
 
 #Colors
 cDeflt = 'w'
-rntiColors = [
-'w',
-'r',
-'b',
-'g',
-'y']
+rntiColors = ["w","#e60049", "#0bb4ff", "#50e991", "#e6d800", "#9b19f5", "#ffa300", "#dc0ab4", "#b3d4ff", "#00bfa0"]
+
 
 
 class simParameters:
     def __init__(self,fileName) -> None:
         print('class simParameters __init__')
+        print(fileName)
         mat = scipy.io.loadmat(fileName)
         self.NumFramesSim = mat['simParameters']['NumFramesSim'][0][0][0][0]
         self.SchedulingType = mat['simParameters']['SchedulingType'][0][0][0][0]
@@ -45,7 +42,8 @@ class simParameters:
         self.TTIGranularity = mat['simParameters']['TTIGranularity'][0][0][0][0]
         self.RBAllocationLimitUL = mat['simParameters']['RBAllocationLimitUL'][0][0][0][0]
         self.RBAllocationLimitDL = mat['simParameters']['RBAllocationLimitDL'][0][0][0][0]
-        
+        self.dlAppDataRate = mat['simParameters']['dlAppDataRate'][0][0][0]
+        self.ulAppDataRate = mat['simParameters']['ulAppDataRate'][0][0][0]
 
 
 def readSimLogFile(fileName):
@@ -212,44 +210,81 @@ def plotRBGrid(ax,df):
     return
 
 def addLegend(ax,simParams,df):
-    textSize = 5
-    #first legend
-    xloc = 0.8
-    yloc = 1.005
+
+    rntiTableX = 0.8
+    rntiTableY = 1.01
+
+    statsTableX = -0.25
+    statsTableY = 1.02
+
+    drTableX = -0.25
+    drTableY = 1.0065
+
+    textSize = 6
+    # -- first legend RNTIs
     ues = []
     for ue in range(1,simParams.NumUEs+1):
         ues.append(patches.Patch(color=rntiColors[ue], label='RNTI:'+str(ue))    )
-    ax.add_artist(ax.legend(handles=ues,bbox_to_anchor=(xloc, yloc), loc='lower left',fontsize=textSize))
+    ax.add_artist(ax.legend(handles=ues,bbox_to_anchor=(rntiTableX, rntiTableY), loc='lower left',fontsize=textSize))
     
-
-    at2 = AnchoredText("Figure 1(b)",
+    # -- Stats
+    legendText = "Strategy: "+str(simParams.SchedulerStrategy)+"\n"
+    legendText += "NumUEs: "+str(simParams.NumUEs)+"\n"
+    legendText += "TTI: "+str(simParams.TTIGranularity)+''
+    # legendText += "File: "+datetime.now().strftime("%Y%m%d_%H%M%S")
+    stats = AnchoredText(legendText,
                        loc='lower left', prop=dict(size=8), frameon=True,
-                       bbox_to_anchor=(-0.25, 1.0065),
+                       bbox_to_anchor=(statsTableX,statsTableY),
                        bbox_transform=ax.transAxes
                        )
-    ax.add_artist(at2)
+    ax.add_artist(stats)
+
+    # -- UE Data Rates
+    dataRateText = 'UE       DL/UL (kbps)'
+    print(simParams.ulAppDataRate)
+    for i in range(len(simParams.ulAppDataRate)): 
+        dataRateText += "\n"
+        dataRateText += "RNTI "+ str(i+1)+" "
+        dataRateText += str(int(simParams.dlAppDataRate[i]/1000))+" / "
+        dataRateText += str(int(simParams.ulAppDataRate[i]/1000))+" "
+        dataRateText += ""
+    print(dataRateText)
+    textSize = 5
+    dataRateLegend = AnchoredText(dataRateText,
+                       loc='lower left', prop=dict(size=8), frameon=True,
+                       bbox_to_anchor=(drTableX, drTableY),
+                       bbox_transform=ax.transAxes
+                       )
+    ax.add_artist(dataRateLegend)
     return
 
 def main():
     print("main()")
     #--Import Files
-    simParams = simParameters('simParameters.mat')
-    df = readSimLogFile('simulationLogs.mat')
+    print(len(sys.argv))
+    if len(sys.argv)==1: #default we pass one argument
+        simParams = simParameters('simParameters.mat')
+        df = readSimLogFile('simulationLogs.mat')
+    else: #if not we assume that we pass the two local file names
+        print(sys.argv[1])
+        simParams = simParameters(sys.argv[1])
+        df = readSimLogFile(sys.argv[2])
     #--Generate df to plot
-    # df = mergeAll(df,simParams)
+    df = mergeAll(df,simParams)
 
     #--save/load for faster coding interations
-    # df.to_pickle('tmp.pkl')
-    # df.to_csv('tmp.csv')
+    df.to_pickle('tmp.pkl')
+    df.to_csv('tmp.csv')
     df = pd.read_pickle('tmp.pkl')
 
     #--setup plot
-    fig = plt.figure(figsize=(4,100)) 
+    fig = plt.figure(figsize=(4,50)) 
     ax = fig.add_subplot(1, 1, 1)
     ax.set_xlim(0,11)
-    ax.set_ylim(-1000,0.075) 
+    ax.set_ylim(-700,0.075) 
     ax.xaxis.set_label_position('top')
     ax.xaxis.tick_top()
+    ax.set_xlabel('RBG')
     ax.set_yticklabels([])
     #--plot
     plotRBGrid(ax,df)
@@ -257,7 +292,7 @@ def main():
     plotSecAxes(ax,simParams,df)
     addLegend(ax,simParams,df)
     #--adjust
-    plt.subplots_adjust(left=0.2, right=.998, top=0.99, bottom=0.001)
+    plt.subplots_adjust(left=0.2, right=.998, top=0.97, bottom=0.001)
 
     #--save or show
     pltName = simParams.SchedulerStrategy+"_"
@@ -265,7 +300,7 @@ def main():
     pltName += "TTI"+str(simParams.TTIGranularity)+'_'
     pltName += datetime.now().strftime("%Y%m%d_%H%M%S")
     print(pltName)
-    plt.savefig('plt.jpeg')
+    plt.savefig(pltName)
     # plt.show()
 if __name__ == "__main__":
     """ This is executed when run from the command line """
