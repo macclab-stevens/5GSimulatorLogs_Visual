@@ -300,6 +300,8 @@ def main():
     pltName += "TTI"+str(simParams.TTIGranularity)+'_'
     pltName += datetime.now().strftime("%Y%m%d_%H%M%S")
     print(pltName)
+    if sys.argv[3] != None:
+        pltName = str(sys.argv[3]) + pltName
     plt.savefig(pltName)
     # plt.show()
 if __name__ == "__main__":
